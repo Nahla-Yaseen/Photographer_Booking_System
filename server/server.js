@@ -480,12 +480,9 @@ app.get("/health", (req, res) => {
   res.json({ status: "OK", timestamp: new Date().toISOString() });
 });
 
-// Only listen when running standalone locally, not on Vercel Serverless Functions
-if (!process.env.VERCEL) {
-  app.listen(PORT, () => {
-    console.log(`Shutter Moments backend mailer server running on port ${PORT}`);
-  });
-}
+app.listen(PORT, () => {
+  console.log(`Shutter Moments backend mailer server running on port ${PORT}`);
+});
 
 process.on("uncaughtException", (err) => {
   console.error("[Mailer Server Uncaught Exception]:", err);
