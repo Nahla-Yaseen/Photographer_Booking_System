@@ -3,13 +3,12 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
+    "postinstall": "npm --prefix ./client install --include=dev",
+    "build": "cd client && npm install --include=dev && npm run build",
     "dev": "npm --prefix ./client run dev",
     "dev:client": "npm --prefix ./client run dev",
     "dev:server": "npm --prefix ./server start",
-    "build": "npm --prefix ./client run build",
-    "preview": "npm --prefix ./client run preview",
-    "install:client": "npm --prefix ./client install",
-    "lint:client": "npm --prefix ./client run lint"
+    "preview": "npm --prefix ./client run preview"
   },
   "dependencies": {
     "cors": "^2.8.5",
