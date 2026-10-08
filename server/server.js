@@ -21,39 +21,17 @@ app.use(express.urlencoded({ extended: true }));
 // Configure Nodemailer Transporter
 // If SMTP credentials exist in .env (e.g. Gmail App Password), use them;
 // otherwise, use an Ethereal test transporter for safe development testing.
-let transporter = null;
-
-async function getTransporter() {
-  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-    return nodemailer.createTransport({
-      service: process.env.EMAIL_SERVICE || "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
-  }
-
-  // Development Fallback: Ethereal test account or local logging
-  if (!transporter) {
-    try {
-      const testAccount = await nodemailer.createTestAccount();
-      transporter = nodemailer.createTransport({
-        host: "smtp.ethereal.email",
-        port: 587,
-        secure: false,
-        auth: {
-          user: testAccount.user,
-          pass: testAccount.pass,
-        },
-      });
-      console.log("Using Ethereal Mailer for test email delivery.");
-    } catch (err) {
-      console.warn("Could not create Ethereal account, defaulting to JSON transport", err);
-      transporter = nodemailer.createTransport({ jsonTransport: true });
-    }
-  }
-  return transporter;
+// Nodemailer Transporter using Gmail
+function getTransporter() {
+  const user = process.env.EMAIL_USER || "mohamedysn130@gmail.com";
+  const pass = process.env.EMAIL_PASS || "nhtx fwpj lgdc prrf";
+  return nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user,
+      pass,
+    },
+  });
 }
 
 // HTML Email Templates
@@ -263,7 +241,7 @@ app.post("/api/send-email", async (req, res) => {
     }
 
     const info = await mailer.sendMail({
-      from: process.env.EMAIL_FROM || '"Shutter Moments Photography" <bookings@shuttermoments.com>',
+      from: process.env.EMAIL_FROM || '"Shutter Moments Photography" <mohamedysn130@gmail.com>',
       to,
       subject: emailSubject,
       html,

@@ -21,36 +21,17 @@ function getStripe() {
   return new Stripe(key);
 }
 
-// Nodemailer Transporter
-let transporter = null;
-async function getTransporter() {
-  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-    return nodemailer.createTransport({
-      service: process.env.EMAIL_SERVICE || "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
-  }
-
-  if (!transporter) {
-    try {
-      const testAccount = await nodemailer.createTestAccount();
-      transporter = nodemailer.createTransport({
-        host: "smtp.ethereal.email",
-        port: 587,
-        secure: false,
-        auth: {
-          user: testAccount.user,
-          pass: testAccount.pass,
-        },
-      });
-    } catch (err) {
-      transporter = nodemailer.createTransport({ jsonTransport: true });
-    }
-  }
-  return transporter;
+// Nodemailer Transporter using Gmail
+function getTransporter() {
+  const user = process.env.EMAIL_USER || "mohamedysn130@gmail.com";
+  const pass = process.env.EMAIL_PASS || "nhtx fwpj lgdc prrf";
+  return nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user,
+      pass,
+    },
+  });
 }
 
 // Email templates
@@ -260,7 +241,7 @@ router.post("/send-email", async (req, res) => {
       : (req.body.html || `<p>${req.body.text || "Notification"}</p>`);
 
     const info = await mailer.sendMail({
-      from: process.env.EMAIL_FROM || '"Shutter Moments Photography" <bookings@shuttermoments.com>',
+      from: process.env.EMAIL_FROM || '"Shutter Moments Photography" <mohamedysn130@gmail.com>',
       to,
       subject: subject || `Booking Confirmed #${booking?.id} – Shutter Moments`,
       html,
