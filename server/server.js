@@ -339,7 +339,6 @@ app.post("/api/payment/stripe/create-checkout-session", async (req, res) => {
       : booking.photographer?.name || booking.photographerName || "Professional Photographer";
 
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
       line_items: [
         {
           price_data: {
