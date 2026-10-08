@@ -3,11 +3,16 @@ import cors from "cors";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import crypto from "crypto";
+import Stripe from "stripe";
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Initialize Stripe (using STRIPE_SECRET_KEY from environment)
+const stripeKey = process.env.STRIPE_SECRET_KEY;
+const stripe = stripeKey ? new Stripe(stripeKey) : null;
 
 app.use(cors({ origin: "*" }));
 app.use(express.json());
@@ -289,6 +294,148 @@ app.post("/api/send-email", async (req, res) => {
   }
 });
 
+// ── Stripe Checkout Integration ───────────────────────────────────────────
+// Returns public Stripe configuration info
+app.get("/api/payment/stripe/config", (req, res) => {
+  return res.json({
+    success: true,
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || "",
+    configured: Boolean(process.env.STRIPE_SECRET_KEY),
+    currency: (process.env.STRIPE_CURRENCY || "lkr").toLowerCase(),
+  });
+});
+
+// Create a Stripe Checkout Session for 30% advance deposit
+app.post("/api/payment/stripe/create-checkout-session", async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(500).json({
+        success: false,
+        error: "Stripe is not configured. Please set STRIPE_SECRET_KEY in server environment variables.",
+      });
+    }
+
+    const { booking, customerInfo, amount, currency: reqCurrency, returnOrigin } = req.body;
+
+    if (!booking) {
+      return res.status(400).json({ success: false, error: "Booking information is required" });
+    }
+
+    const depositAmount = Number(amount || booking.depositPaid || (booking.totalAmount ? booking.totalAmount * 0.3 : 15000));
+    const currency = (reqCurrency || process.env.STRIPE_CURRENCY || "lkr").toLowerCase();
+    const orderId = "ORD-" + Date.now().toString().slice(-8);
+
+    // Determine host origin for redirect
+    const origin = (
+      returnOrigin ||
+      req.headers.origin ||
+      req.headers.referer ||
+      process.env.CLIENT_URL ||
+      "http://localhost:5173"
+    ).replace(/\/$/, "");
+
+    const photographerName = typeof booking.photographer === "string"
+      ? booking.photographer
+      : booking.photographer?.name || booking.photographerName || "Professional Photographer";
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price_data: {
+            currency: currency,
+            product_data: {
+              name: `${booking.photographyType || booking.event || "Photography Session"} (30% Advance Deposit)`,
+              description: `Booking #${orderId} with ${photographerName} on ${booking.eventDate || booking.date || "Scheduled Date"}`,
+            },
+            unit_amount: Math.round(depositAmount * 100), // Stripe expects amounts in cents/smallest currency unit
+          },
+          quantity: 1,
+        },
+      ],
+      mode: "payment",
+      customer_email: customerInfo?.email || booking.clientEmail || undefined,
+      success_url: `${origin}/booking-confirmation?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/payment?cancelled=true`,
+      metadata: {
+        orderId,
+        bookingId: booking.id || orderId,
+        clientName: customerInfo?.name || booking.client || "Client",
+        clientEmail: customerInfo?.email || booking.clientEmail || "",
+        clientPhone: customerInfo?.phone || booking.clientPhone || "",
+        photographerName,
+        totalAmount: String(booking.totalAmount || Math.round(depositAmount / 0.3)),
+        depositAmount: String(depositAmount),
+        eventDate: booking.eventDate || booking.date || "",
+        slotLabel: booking.slotLabel || booking.time || "",
+        location: booking.location || "On-site",
+        photographyType: booking.photographyType || booking.event || "Photo Shoot",
+      },
+    });
+
+    console.log(`[Stripe Checkout Created] Session ID: ${session.id}, Order ID: ${orderId}, Amount: ${depositAmount} ${currency}`);
+
+    return res.json({
+      success: true,
+      url: session.url,
+      sessionId: session.id,
+      orderId,
+    });
+  } catch (error) {
+    console.error("[Stripe Create Checkout Error]:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to create Stripe checkout session",
+    });
+  }
+});
+
+// Verify a Stripe Checkout Session upon return to /booking-confirmation
+app.get("/api/payment/stripe/verify-session/:sessionId", async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    if (!stripe) {
+      return res.status(500).json({ success: false, error: "Stripe is not configured on server" });
+    }
+
+    if (!sessionId) {
+      return res.status(400).json({ success: false, error: "Session ID is required" });
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    if (session.payment_status === "paid") {
+      console.log(`[Stripe Session Verified] ID: ${sessionId}, Paid: YES, Amount: ${session.amount_total / 100} ${session.currency}`);
+      return res.json({
+        success: true,
+        paid: true,
+        session: {
+          id: session.id,
+          paymentIntent: session.payment_intent,
+          amountTotal: session.amount_total / 100,
+          currency: session.currency,
+          customerDetails: session.customer_details,
+          metadata: session.metadata,
+        },
+      });
+    } else {
+      console.warn(`[Stripe Session Verified] ID: ${sessionId}, Status: ${session.payment_status}`);
+      return res.json({
+        success: true,
+        paid: false,
+        status: session.payment_status,
+      });
+    }
+  } catch (error) {
+    console.error("[Stripe Verify Session Error]:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to verify Stripe session",
+    });
+  }
+});
+
 // ── PayHere Secure Hash Generation ──────────────────────────────────────────
 // The Merchant Secret NEVER leaves this server.
 // Formula (from PayHere docs):
@@ -475,14 +622,24 @@ app.get("/api/payment/verify/:orderId", (req, res) => {
   });
 });
 
-// Health check
+// Health checks
 app.get("/health", (req, res) => {
   res.json({ status: "OK", timestamp: new Date().toISOString() });
 });
 
-app.listen(PORT, () => {
-  console.log(`Shutter Moments backend mailer server running on port ${PORT}`);
+app.get("/api/health", (req, res) => {
+  res.json({
+    status: "OK",
+    timestamp: new Date().toISOString(),
+    stripeConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
+  });
 });
+
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Shutter Moments backend server running on port ${PORT}`);
+  });
+}
 
 process.on("uncaughtException", (err) => {
   console.error("[Mailer Server Uncaught Exception]:", err);

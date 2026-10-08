@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   CheckCircle, CreditCard, Lock, Mail, User, Phone,
-  AlertCircle, ExternalLink, HelpCircle, ShieldCheck, ChevronDown, ChevronUp
+  AlertCircle, ShieldCheck, ArrowRight, Loader2, RefreshCw
 } from "lucide-react";
 import Navbar from "../../components/layout/Navbar";
 import { useBooking } from "../../context/BookingContext";
@@ -11,14 +11,21 @@ import { PHOTOGRAPHERS } from "../../data/mockData";
 
 const PAYMENT_API = import.meta.env.VITE_PAYMENT_API_URL ?? (import.meta.env.PROD ? "" : "http://localhost:5000");
 
-
 export default function PaymentPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, photographersList } = useAuth();
   const { booking, confirmBooking } = useBooking();
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
-  const [showGuide, setShowGuide] = useState(false);
+  const [wasCancelled, setWasCancelled] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("cancelled") === "true") {
+      setWasCancelled(true);
+    }
+  }, [location.search]);
 
   // Auto-fill customer details from registered customer account
   const [customerInfo, setCustomerInfo] = useState(() => {
@@ -70,10 +77,8 @@ export default function PaymentPage() {
   const totalAmount = photoPrice + servicesTotal;
   const depositAmount = Math.round(totalAmount * 0.3); // 30% deposit
 
-  const merchantId = "(from server)"; // displayed only; real value comes from backend
-
-  // Finalize booking after payment
-  const completeBookingProcess = (paymentRef = "PAYHERE-SANDBOX-" + Date.now()) => {
+  // Fallback demo completion if user wants to test without live Stripe keys
+  const completeBookingProcess = (paymentRef = "DEMO-CARD-" + Date.now().toString().slice(-6)) => {
     confirmBooking(
       {
         ...photographer,
@@ -92,110 +97,71 @@ export default function PaymentPage() {
     navigate("/booking-confirmation");
   };
 
-  // Launch PayHere Sandbox Checkout Popup
-  const handlePayHerePayment = async (e) => {
+  // Launch Stripe Checkout Hosted Page
+  const handleStripePayment = async (e) => {
     e?.preventDefault();
-    if (!customerInfo.email) {
-      setError("Please provide an email address to receive your confirmation & invoice.");
+    if (!customerInfo.email || !customerInfo.email.includes("@")) {
+      setError("Please provide a valid email address to receive your confirmation & invoice.");
       return;
     }
     setError("");
     setProcessing(true);
 
-    const orderId         = "ORD-" + Date.now().toString().slice(-8);
-    const formattedAmount = depositAmount.toFixed(2);
+    const pendingBookingData = {
+      booking,
+      photographer: {
+        ...photographer,
+        name: photographerName,
+        id: photographer?.id || booking.photographerId,
+      },
+      customerInfo: {
+        name: customerInfo.name || user?.name || "Valued Client",
+        email: customerInfo.email || user?.email || "customer@shuttermoments.com",
+        phone: customerInfo.phone || user?.phone || "+94 77 123 4567",
+        clientId: user?.id || null,
+        userId: user?.id || null,
+      },
+      depositAmount,
+      totalAmount,
+    };
 
-    // ── Fetch hash and notify_url from backend (secret never leaves server) ──
-    let backendMerchantId, hash, backendNotifyUrl;
     try {
-      const resp = await fetch(`${PAYMENT_API}/api/payment/hash`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ order_id: orderId, amount: formattedAmount, currency: "LKR" }),
-      });
-      const data = await resp.json();
-      if (!resp.ok || !data.success) {
-        throw new Error(data.error || "Backend hash request failed");
-      }
-      backendMerchantId = data.merchant_id;
-      hash              = data.hash;
-      backendNotifyUrl  = data.notify_url || import.meta.env.VITE_PAYHERE_NOTIFY_URL || "https://grunge-deserve-ambush.ngrok-free.dev/api/payment/notify";
-    } catch (err) {
-      setProcessing(false);
-      setError(`Could not reach payment server: ${err.message}. Make sure the backend is running (npm run dev in /server).`);
-      return;
+      sessionStorage.setItem("shutter_pending_booking", JSON.stringify(pendingBookingData));
+    } catch (e) {
+      console.warn("sessionStorage error:", e);
     }
 
-    if (window.payhere) {
-      const paymentObject = {
-        sandbox:     true,
-        merchant_id: backendMerchantId,
-        return_url:  window.location.origin + "/booking-confirmation",
-        cancel_url:  window.location.href,
-        notify_url:  backendNotifyUrl,
-        order_id:    orderId,
-        items:       `${booking.photographyType || "Photo Shoot"} (30% Advance Deposit)`,
-        amount:      formattedAmount,
-        currency:    "LKR",
-        hash:        hash,
-        first_name:  (customerInfo.name || "Customer").split(" ")[0] || "Customer",
-        last_name:   (customerInfo.name || "").split(" ").slice(1).join(" ") || "Client",
-        email:       customerInfo.email,
-        phone:       customerInfo.phone || "+94771234567",
-        address:     booking.location || "Colombo",
-        city:        "Colombo",
-        country:     "Sri Lanka",
-        delivery_address: booking.location || "Colombo",
-        delivery_city:    "Colombo",
-        delivery_country: "Sri Lanka",
-        custom_1:    photographerName,
-        custom_2:    booking.eventDate || "",
-      };
+    try {
+      const resp = await fetch(`${PAYMENT_API}/api/payment/stripe/create-checkout-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          booking,
+          customerInfo,
+          amount: depositAmount,
+          currency: "lkr",
+          returnOrigin: window.location.origin,
+        }),
+      });
 
-      // PayHere Callbacks
-      window.payhere.onCompleted = async function onCompleted(confirmedOrderId) {
-        const finalOrderId = confirmedOrderId || orderId;
-        // Attempt server-side verification via webhook status endpoint
-        try {
-          const verifyResp = await fetch(`${PAYMENT_API}/api/payment/verify/${finalOrderId}`);
-          if (verifyResp.ok) {
-            const verifyData = await verifyResp.json();
-            if (verifyData.paid) {
-              setProcessing(false);
-              completeBookingProcess(`PAYHERE-VERIFIED-${verifyData.payment?.payment_id || finalOrderId}`);
-              return;
-            }
-          }
-        } catch (e) {
-          console.log("[Payment verification query note]", e.message);
-        }
+      const data = await resp.json();
 
-        // PayHere client modal confirmed completion
-        setProcessing(false);
-        completeBookingProcess(`PAYHERE-COMPLETED-${finalOrderId}`);
-      };
-
-      window.payhere.onDismissed = function onDismissed() {
-        setProcessing(false);
-        setError("PayHere popup was closed. No payment was taken. Click the button again when you are ready to pay.");
-      };
-
-      window.payhere.onError = function onError(payError) {
-        setProcessing(false);
-        console.error("PayHere Error:", payError);
-        setError(`PayHere error: ${payError || "Gateway returned an error."}`);
-      };
-
-      try {
-        window.payhere.startPayment(paymentObject);
-      } catch (err) {
-        setProcessing(false);
-        console.warn("PayHere startPayment error:", err);
-        setError("Could not launch PayHere popup. Check the browser console for details.");
+      if (!resp.ok || !data.success) {
+        throw new Error(data.error || "Failed to initialize Stripe checkout.");
       }
-    } else {
+
+      if (data.url) {
+        // Redirect directly to Stripe hosted checkout
+        window.location.href = data.url;
+      } else {
+        throw new Error("No checkout redirect URL received from payment server.");
+      }
+    } catch (err) {
       setProcessing(false);
-      setError("PayHere SDK is not loaded. Ensure you have an active internet connection to load https://www.payhere.lk/lib/payhere.js.");
+      console.error("[Stripe Checkout Error]", err);
+      setError(
+        `${err.message}. If STRIPE_SECRET_KEY is not yet added in Vercel Environment Variables, please add it in your Vercel Dashboard.`
+      );
     }
   };
 
@@ -211,7 +177,7 @@ export default function PaymentPage() {
               { label: "Check Availability", done: true },
               { label: "Event Details & Slots", done: true },
               { label: "Add Services", done: true },
-              { label: "Confirmation", active: true },
+              { label: "Payment & Confirmation", active: true },
             ].map((s, i) => (
               <div key={i} className="step-item">
                 {i > 0 && <div className={`step-connector done`} />}
@@ -227,32 +193,66 @@ export default function PaymentPage() {
             ))}
           </div>
 
-        
+          {wasCancelled && (
+            <div style={{
+              maxWidth: 960,
+              margin: "0 auto 24px",
+              padding: "14px 20px",
+              background: "rgba(245, 158, 11, 0.15)",
+              border: "1px solid rgba(245, 158, 11, 0.4)",
+              borderRadius: 10,
+              color: "#fde68a",
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              fontSize: "0.9rem"
+            }}>
+              <AlertCircle size={20} style={{ flexShrink: 0, color: "var(--gold-400)" }} />
+              <div>
+                <strong>Payment Incomplete:</strong> Your previous checkout session was cancelled. You can review your details below and try again whenever you are ready.
+              </div>
+            </div>
+          )}
 
-
-          <div className="payment-grid" style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 24 }}>
+          <div className="payment-grid" style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 24, maxWidth: 1000, margin: "0 auto" }}>
             {/* Left: Payment Form */}
             <div>
               <div className="card" style={{ padding: 32, background: "var(--navy-800)", border: "1px solid var(--navy-600)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-                  <CreditCard size={24} color="#60a5fa" />
-                  <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#ffffff" }}>
-                    Advance Payment & Details
-                  </h2>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <CreditCard size={24} color="#60a5fa" />
+                    <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#ffffff" }}>
+                      Stripe Card Payment
+                    </h2>
+                  </div>
+                  <span style={{
+                    fontSize: "0.75rem",
+                    padding: "4px 10px",
+                    borderRadius: 20,
+                    background: "rgba(59, 130, 246, 0.15)",
+                    border: "1px solid rgba(59, 130, 246, 0.3)",
+                    color: "#60a5fa",
+                    fontWeight: 600,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4
+                  }}>
+                    <ShieldCheck size={13} /> Stripe Certified
+                  </span>
                 </div>
                 
                 <div style={{
                   marginBottom: 20,
-                  background: "rgba(245, 158, 11, 0.12)",
-                  border: "1px solid rgba(245, 158, 11, 0.3)",
-                  color: "#fde68a",
+                  background: "rgba(34, 197, 94, 0.1)",
+                  border: "1px solid rgba(34, 197, 94, 0.25)",
+                  color: "#86efac",
                   padding: "14px 18px",
                   borderRadius: 8
                 }}>
                   <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                    <AlertCircle size={18} style={{ marginTop: 2, flexShrink: 0, color: "var(--gold-400)" }} />
+                    <CheckCircle size={18} style={{ marginTop: 2, flexShrink: 0, color: "#4ade80" }} />
                     <div style={{ fontSize: "0.85rem", lineHeight: 1.5 }}>
-                      <strong>30% Advance Confirmation:</strong> Pay <strong>Rs. {depositAmount.toLocaleString()}</strong> to lock in your photographer and time slot. An instant confirmation email with your official invoice receipt will be sent to your inbox. The 70% balance is payable on event day.
+                      <strong>30% Advance Deposit Required:</strong> Pay <strong>Rs. {depositAmount.toLocaleString()}</strong> via Stripe's encrypted checkout to lock in your photographer. The remaining 70% (Rs. {(totalAmount - depositAmount).toLocaleString()}) is payable on event day.
                     </div>
                   </div>
                 </div>
@@ -265,13 +265,14 @@ export default function PaymentPage() {
                     border: "1px solid rgba(239, 68, 68, 0.35)",
                     borderRadius: 8,
                     color: "#fca5a5",
-                    fontSize: "0.85rem"
+                    fontSize: "0.85rem",
+                    lineHeight: 1.5
                   }}>
                     {error}
                   </div>
                 )}
 
-                <form onSubmit={handlePayHerePayment}>
+                <form onSubmit={handleStripePayment}>
                   {/* Customer Contact Details Section */}
                   <div style={{
                     marginBottom: 22,
@@ -281,7 +282,7 @@ export default function PaymentPage() {
                     padding: 18
                   }}>
                     <div style={{ fontSize: "0.88rem", fontWeight: 700, color: "#ffffff", marginBottom: 14, display: "flex", alignItems: "center", gap: 6 }}>
-                      <User size={15} color="var(--gold-400)" /> Customer Details (Auto-filled from registered account)
+                      <User size={15} color="var(--gold-400)" /> Customer & Invoice Details
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
                       <div className="form-group">
@@ -292,6 +293,7 @@ export default function PaymentPage() {
                           required
                           value={customerInfo.name}
                           onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
+                          placeholder="e.g. John Silva"
                         />
                       </div>
                       <div className="form-group">
@@ -302,12 +304,13 @@ export default function PaymentPage() {
                           required
                           value={customerInfo.phone}
                           onChange={(e) => setCustomerInfo({ ...customerInfo, phone: e.target.value })}
+                          placeholder="+94 77 123 4567"
                         />
                       </div>
                     </div>
                     <div className="form-group">
                       <label className="form-label" style={{ fontSize: "0.78rem", display: "flex", alignItems: "center", gap: 4 }}>
-                        <Mail size={13} /> Email Address (Official Booking Receipt & Invoice dispatched here)
+                        <Mail size={13} /> Email Address (Official Receipt dispatched here)
                       </label>
                       <input
                         type="email"
@@ -321,7 +324,7 @@ export default function PaymentPage() {
                   </div>
 
                   {/* Payment Buttons */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     <button 
                       type="submit" 
                       className="btn btn-primary w-full btn-lg" 
@@ -331,16 +334,53 @@ export default function PaymentPage() {
                         display: "flex",
                         justifyContent: "center",
                         alignItems: "center",
-                        gap: 8,
+                        gap: 10,
+                        padding: "14px 20px",
+                        background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
+                        border: "none",
+                        boxShadow: "0 4px 14px rgba(99, 102, 241, 0.4)"
                       }}
                       disabled={processing}
                     >
-                      {processing ? "Launching PayHere Sandbox..." : (
+                      {processing ? (
                         <>
-                          <Lock size={18} /> Pay Rs. {depositAmount.toLocaleString()} via PayHere Sandbox
+                          <Loader2 size={18} className="animate-spin" /> Redirecting to Stripe...
+                        </>
+                      ) : (
+                        <>
+                          <Lock size={18} /> Pay Rs. {depositAmount.toLocaleString()} with Stripe
+                          <ArrowRight size={18} />
                         </>
                       )}
                     </button>
+
+                    <div style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 16,
+                      fontSize: "0.78rem",
+                      color: "var(--text-muted)",
+                      paddingTop: 8
+                    }}>
+                      <span>💳 Visa / Mastercard / Amex</span>
+                      <span>•</span>
+                      <span>🔒 256-bit SSL Encrypted</span>
+                    </div>
+
+                    {/* Developer / Demo Instant Test Option if Stripe keys are not yet entered */}
+                    {error && (
+                      <div style={{ marginTop: 12, textAlign: "center" }}>
+                        <button
+                          type="button"
+                          onClick={() => completeBookingProcess()}
+                          className="btn btn-secondary w-full"
+                          style={{ fontSize: "0.82rem", padding: "8px 12px", borderStyle: "dashed" }}
+                        >
+                          🧪 Instant Demo Complete (Bypass Stripe for Local / Testing)
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </form>
               </div>

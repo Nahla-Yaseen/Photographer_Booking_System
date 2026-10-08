@@ -1,16 +1,150 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle, Download, Home, CalendarCheck, MapPin, Clock, Package, Check, Loader2 } from "lucide-react";
+import { CheckCircle, Download, Home, CalendarCheck, MapPin, Clock, Package, Check, Loader2, AlertCircle, ArrowLeft } from "lucide-react";
 import Navbar from "../../components/layout/Navbar";
 import { useBooking } from "../../context/BookingContext";
 import { useAuth } from "../../context/AuthContext";
 import { downloadInvoicePDF } from "../../utils/invoiceGenerator";
 
+const PAYMENT_API = import.meta.env.VITE_PAYMENT_API_URL ?? (import.meta.env.PROD ? "" : "http://localhost:5000");
+
 export default function BookingConfirmation() {
-  const { confirmedBooking } = useBooking();
+  const { confirmedBooking, confirmBooking } = useBooking();
   const { user } = useAuth();
   const [downloading, setDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [verifyingSession, setVerifyingSession] = useState(false);
+  const [verifyError, setVerifyError] = useState("");
+
+  // Check for Stripe Checkout return (?session_id=cs_...)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("session_id");
+
+    if (sessionId && !confirmedBooking) {
+      setVerifyingSession(true);
+      fetch(`${PAYMENT_API}/api/payment/stripe/verify-session/${sessionId}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.paid) {
+            let pending = null;
+            try {
+              const raw = sessionStorage.getItem("shutter_pending_booking");
+              if (raw) pending = JSON.parse(raw);
+            } catch (e) {}
+
+            const meta = data.session?.metadata || {};
+            const paymentRef = `STRIPE-${(data.session?.paymentIntent || sessionId).slice(-8)}`;
+
+            if (pending && pending.booking) {
+              confirmBooking(
+                pending.photographer,
+                {
+                  ...(pending.customerInfo || {}),
+                  paymentRef,
+                },
+                pending.booking
+              );
+              try {
+                sessionStorage.removeItem("shutter_pending_booking");
+              } catch (e) {}
+            } else {
+              // Fallback reconstruct from Stripe metadata
+              const clientData = {
+                name: meta.clientName || data.session?.customerDetails?.name || "Customer",
+                email: meta.clientEmail || data.session?.customerDetails?.email || "",
+                phone: meta.clientPhone || "",
+                paymentRef,
+              };
+              const customBooking = {
+                photographyType: meta.photographyType || "Photo Shoot",
+                eventDate: meta.eventDate || "Upcoming Date",
+                slotLabel: meta.slotLabel || "Confirmed Time Slot",
+                location: meta.location || "On-site",
+                totalAmount: Number(meta.totalAmount || 36000),
+              };
+              confirmBooking({ name: meta.photographerName || "Professional Photographer" }, clientData, customBooking);
+            }
+
+            // Clean query param from URL without reload
+            window.history.replaceState({}, document.title, window.location.pathname);
+          } else {
+            setVerifyError(data.error || "Payment was not completed on Stripe.");
+          }
+        })
+        .catch((err) => {
+          console.error("Stripe verification error:", err);
+          setVerifyError(`Failed to verify payment status: ${err.message}`);
+        })
+        .finally(() => {
+          setVerifyingSession(false);
+        });
+    }
+  }, [confirmedBooking, confirmBooking]);
+
+  if (verifyingSession) {
+    return (
+      <div className="page-wrapper" style={{ background: "var(--navy-900)", minHeight: "100vh" }}>
+        <Navbar />
+        <div className="page-content" style={{ paddingTop: 140 }}>
+          <div className="container" style={{ maxWidth: 520, textAlign: "center", padding: "40px 20px" }}>
+            <div className="card" style={{ padding: 48, background: "var(--navy-800)", border: "1px solid var(--navy-600)", borderRadius: 16 }}>
+              <div style={{
+                width: 68,
+                height: 68,
+                borderRadius: "50%",
+                background: "rgba(99, 102, 241, 0.15)",
+                color: "#818cf8",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 24px"
+              }}>
+                <Loader2 size={36} className="animate-spin" />
+              </div>
+              <h2 style={{ color: "#ffffff", fontSize: "1.35rem", fontWeight: 800, marginBottom: 12 }}>
+                Verifying Stripe Payment...
+              </h2>
+              <p style={{ color: "var(--text-secondary)", fontSize: "0.92rem", lineHeight: 1.6 }}>
+                Please hold on a moment while we confirm your advance deposit and generate your official booking confirmation.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (verifyError) {
+    return (
+      <div className="page-wrapper" style={{ background: "var(--navy-900)", minHeight: "100vh" }}>
+        <Navbar />
+        <div className="page-content" style={{ paddingTop: 140 }}>
+          <div className="container" style={{ maxWidth: 540, textAlign: "center", padding: "40px 20px" }}>
+            <div className="card" style={{ padding: 40, background: "var(--navy-800)", border: "1px solid rgba(239, 68, 68, 0.4)", borderRadius: 16 }}>
+              <div style={{ width: 64, height: 64, borderRadius: "50%", background: "rgba(239, 68, 68, 0.15)", color: "#f87171", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+                <AlertCircle size={32} />
+              </div>
+              <h2 style={{ color: "#ffffff", fontSize: "1.35rem", fontWeight: 800, marginBottom: 12 }}>
+                Payment Verification Notice
+              </h2>
+              <p style={{ color: "var(--text-secondary)", fontSize: "0.92rem", lineHeight: 1.6, marginBottom: 28 }}>
+                {verifyError}
+              </p>
+              <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+                <Link to="/payment" className="btn btn-primary">
+                  <ArrowLeft size={16} /> Return to Payment
+                </Link>
+                <Link to="/book" className="btn btn-secondary">
+                  Choose New Slot
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!confirmedBooking) {
     return (
@@ -26,7 +160,7 @@ export default function BookingConfirmation() {
                 No Active Booking Found
               </h2>
               <p style={{ color: "var(--text-secondary)", fontSize: "0.92rem", lineHeight: 1.6, marginBottom: 28 }}>
-                You do not have an active confirmed booking. Please select a photographer, date, and complete your 30% advance deposit via PayHere Sandbox.
+                You do not have an active confirmed booking in this session. Please select a photographer, date, and complete your 30% advance deposit via Stripe.
               </p>
               <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
                 <Link to="/book" className="btn btn-primary">
@@ -51,7 +185,6 @@ export default function BookingConfirmation() {
       : b.photographer?.name || (b.photographerName && b.photographerName !== "Professional Photographer" ? b.photographerName : "Alex Morgan");
   const displayDate = b.eventDate || b.date || "Upcoming Date";
   const displayTime = b.slotLabel || b.time || (b.startTime ? `${b.startTime} – ${b.endTime}` : "Scheduled Time");
-  const photoPrice = (b.totalAmount || b.amount || 0) - (b.selectedServices || []).reduce((a, s) => a + s.price, 0);
 
   const handleDownloadInvoice = async () => {
     try {
@@ -118,6 +251,19 @@ export default function BookingConfirmation() {
               <div className="confirm-id">
                 <span style={{ color: "var(--text-muted)" }}>Booking ID:</span>
                 <span className="booking-id-pill">{b.id}</span>
+                {b.paymentRef && (
+                  <span style={{
+                    fontSize: "0.78rem",
+                    padding: "4px 10px",
+                    borderRadius: 20,
+                    background: "rgba(34, 197, 94, 0.15)",
+                    border: "1px solid rgba(34, 197, 94, 0.3)",
+                    color: "#4ade80",
+                    fontWeight: 600
+                  }}>
+                    Ref: {b.paymentRef}
+                  </span>
+                )}
               </div>
 
               <div className="confirm-detail-cards">
@@ -226,8 +372,8 @@ export default function BookingConfirmation() {
                     </div>
                     {b.selectedServices.map((s, i) => (
                       <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", marginBottom: 8 }}>
-                        <span style={{ color: "var(--text-muted)" }}>{s.name}</span>
-                        <span style={{ fontWeight: 600 }}>Rs. {s.price.toLocaleString()}</span>
+                        <span style={{ color: "var(--text-muted)" }}>{typeof s === "string" ? s : s.name}</span>
+                        <span style={{ fontWeight: 600 }}>Rs. {(s.price || 0).toLocaleString()}</span>
                       </div>
                     ))}
                   </>
@@ -238,7 +384,7 @@ export default function BookingConfirmation() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span style={{ fontWeight: 700, fontSize: "0.9rem" }}>Total Amount</span>
                   <span style={{ fontWeight: 900, fontSize: "1.2rem", color: "var(--gold-400)" }}>
-                    Rs. {b.totalAmount.toLocaleString()}
+                    Rs. {(b.totalAmount || 0).toLocaleString()}
                   </span>
                 </div>
 
@@ -247,9 +393,9 @@ export default function BookingConfirmation() {
                 <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
                   <div style={{ fontWeight: 700, color: "var(--white)", marginBottom: 8 }}>Payment Status</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <span>• Payment Method: Card / 30% Advance Deposit</span>
-                    <span>• Deposit Paid (30%): <span style={{ color: "#34d399", fontWeight: 700 }}>Rs. {(b.totalAmount * 0.3).toLocaleString()}</span></span>
-                    <span>• Remaining Balance: <span style={{ color: "var(--amber-500)" }}>Rs. {(b.totalAmount * 0.7).toLocaleString()}</span> (Due on Event Day)</span>
+                    <span>• Payment Method: {b.paymentRef ? `Stripe (${b.paymentRef})` : "Card / 30% Advance Deposit"}</span>
+                    <span>• Deposit Paid (30%): <span style={{ color: "#34d399", fontWeight: 700 }}>Rs. {((b.totalAmount || 0) * 0.3).toLocaleString()}</span></span>
+                    <span>• Remaining Balance: <span style={{ color: "var(--amber-500)" }}>Rs. {((b.totalAmount || 0) * 0.7).toLocaleString()}</span> (Due on Event Day)</span>
                   </div>
                 </div>
               </div>

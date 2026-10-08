@@ -34,7 +34,13 @@ export const BookingProvider = ({ children }) => {
     totalAmount: 0,
   });
 
-  const [confirmedBooking, setConfirmedBooking] = useState(null);
+  const [confirmedBooking, setConfirmedBooking] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem("shutter_confirmed_booking");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return null;
+  });
 
   // Shared persistent bookings across User, Admin, and Photographer
   const [allBookings, setAllBookings] = useState(() => {
@@ -279,47 +285,49 @@ export const BookingProvider = ({ children }) => {
     };
   };
 
-  const confirmBooking = (photographerData, clientData = {}) => {
-    const servicesTotal = booking.selectedServices.reduce(
+  const confirmBooking = (photographerData, clientData = {}, customBooking = null) => {
+    const activeBooking = customBooking || booking;
+    const servicesTotal = (activeBooking.selectedServices || []).reduce(
       (acc, s) => acc + s.price,
       0
     );
 
-    const slotCount = Math.max(1, booking.selectedSlotIds?.length || 1);
-    const photoBase = booking.bookingType === "time_based"
+    const slotCount = Math.max(1, activeBooking.selectedSlotIds?.length || 1);
+    const photoBase = activeBooking.bookingType === "time_based"
       ? (photographerData?.hourlyRate || 6000) * slotCount
       : (photographerData?.price || 45000);
 
-    const total = photoBase + servicesTotal;
-    const id = "BK" + Date.now().toString().slice(-9);
+    const total = activeBooking.totalAmount || (photoBase + servicesTotal);
+    const id = activeBooking.id || "BK" + Date.now().toString().slice(-9);
 
     const clientName = typeof clientData === "object" ? clientData.name || "Customer" : clientData || "Customer";
     const clientEmail = typeof clientData === "object" ? clientData.email || "customer@shuttermoments.com" : "customer@shuttermoments.com";
     const clientPhone = typeof clientData === "object" ? clientData.phone || "+94 77 123 4567" : "+94 77 123 4567";
     const clientId = typeof clientData === "object" ? clientData.clientId || clientData.userId || null : null;
+    const paymentRef = typeof clientData === "object" ? clientData.paymentRef || null : null;
 
     const resolvedPhotographerName =
       photographerData?.name ||
-      (booking.photographerName && booking.photographerName !== "Professional Photographer" ? booking.photographerName : null) ||
-      (typeof booking.photographer === "string" && booking.photographer !== "Professional Photographer" ? booking.photographer : null) ||
-      (booking.photographer && typeof booking.photographer === "object" ? booking.photographer.name : null) ||
+      (activeBooking.photographerName && activeBooking.photographerName !== "Professional Photographer" ? activeBooking.photographerName : null) ||
+      (typeof activeBooking.photographer === "string" && activeBooking.photographer !== "Professional Photographer" ? activeBooking.photographer : null) ||
+      (activeBooking.photographer && typeof activeBooking.photographer === "object" ? activeBooking.photographer.name : null) ||
       photographersList?.[0]?.name ||
       "Alex Morgan";
 
-    const servicesList = (booking.selectedServices || []).map(s => typeof s === "string" ? s : s.name);
+    const servicesList = (activeBooking.selectedServices || []).map(s => typeof s === "string" ? s : s.name);
 
     const newBooking = {
       id,
-      event: booking.photographyType || "Photo Shoot",
-      photographyType: booking.photographyType,
-      bookingType: booking.bookingType || "time_based",
-      packageType: booking.packageType || null,
-      package: booking.packageType || (booking.bookingType === "time_based" ? "Hourly Shoot" : "Standard Package"),
-      slotId: booking.slotId || null,
-      slotIds: booking.selectedSlotIds?.length > 0 ? booking.selectedSlotIds : [booking.slotId],
-      selectedSlotIds: booking.selectedSlotIds?.length > 0 ? booking.selectedSlotIds : [booking.slotId],
-      slotLabel: booking.slotLabel || `${booking.startTime} – ${booking.endTime}`,
-      time: booking.slotLabel || `${booking.startTime} – ${booking.endTime}`,
+      event: activeBooking.photographyType || "Photo Shoot",
+      photographyType: activeBooking.photographyType,
+      bookingType: activeBooking.bookingType || "time_based",
+      packageType: activeBooking.packageType || null,
+      package: activeBooking.packageType || (activeBooking.bookingType === "time_based" ? "Hourly Shoot" : "Standard Package"),
+      slotId: activeBooking.slotId || null,
+      slotIds: activeBooking.selectedSlotIds?.length > 0 ? activeBooking.selectedSlotIds : [activeBooking.slotId],
+      selectedSlotIds: activeBooking.selectedSlotIds?.length > 0 ? activeBooking.selectedSlotIds : [activeBooking.slotId],
+      slotLabel: activeBooking.slotLabel || `${activeBooking.startTime} – ${activeBooking.endTime}`,
+      time: activeBooking.slotLabel || `${activeBooking.startTime} – ${activeBooking.endTime}`,
       client: clientName,
       clientEmail,
       clientPhone,
@@ -327,21 +335,26 @@ export const BookingProvider = ({ children }) => {
       userId: clientId,
       photographer: resolvedPhotographerName,
       photographerName: resolvedPhotographerName,
-      photographerId: photographerData?.id || booking.photographerId || "",
-      date: booking.eventDate || "Upcoming Date",
+      photographerId: photographerData?.id || activeBooking.photographerId || "",
+      date: activeBooking.eventDate || "Upcoming Date",
       amount: total,
       totalAmount: total,
       depositPaid: total * 0.3,
       balanceRemaining: total * 0.7,
       status: "Confirmed",
-      location: booking.location || "On-site",
-      coordinates: booking.coordinates || null,
+      paymentRef: paymentRef || "Card Payment",
+      location: activeBooking.location || "On-site",
+      coordinates: activeBooking.coordinates || null,
       services: servicesList,
-      selectedServices: booking.selectedServices || [],
+      selectedServices: activeBooking.selectedServices || [],
       createdAt: new Date().toISOString(),
     };
 
     setConfirmedBooking(newBooking);
+    try {
+      sessionStorage.setItem("shutter_confirmed_booking", JSON.stringify(newBooking));
+    } catch (e) {}
+
     setAllBookings((prev) => [newBooking, ...prev]);
 
     // 1. Save to Google Cloud Firestore
@@ -354,7 +367,7 @@ export const BookingProvider = ({ children }) => {
       clientEmail,
       amountPaid: total * 0.3,
       totalAmount: total,
-      paymentMethod: "Card / Advance Deposit (30%)",
+      paymentMethod: paymentRef ? `Stripe (${paymentRef})` : "Card / Advance Deposit (30%)",
       status: "Success",
     }).catch(err => console.warn("Firestore recordPayment error:", err));
 
