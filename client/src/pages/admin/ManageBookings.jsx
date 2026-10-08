@@ -88,7 +88,7 @@ export default function ManageBookings() {
     if (!cancelTarget) return;
     const finalReason = customReason.trim() ? customReason.trim() : cancelReason;
 
-    updateBookingStatus(cancelTarget.id, "Cancelled", finalReason, "Admin Management");
+    updateBookingStatus(cancelTarget.id, "Cancelled", finalReason, "Admin Management", cancelTarget);
 
     showNotification(
       `Booking ${cancelTarget.id} has been cancelled. Urgent cancellation email sent to ${cancelTarget.clientEmail || cancelTarget.client} with refund details.`,

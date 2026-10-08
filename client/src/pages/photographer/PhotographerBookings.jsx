@@ -51,7 +51,7 @@ export default function PhotographerBookings() {
     if (!cancelTarget) return;
     const finalReason = customReason.trim() ? customReason.trim() : cancelReason;
 
-    updateBookingStatus(cancelTarget.id, "Cancelled", finalReason, `Photographer (${photographerName})`);
+    updateBookingStatus(cancelTarget.id, "Cancelled", finalReason, `Photographer (${photographerName})`, cancelTarget);
     showNotification(`Booking ${cancelTarget.id} cancelled. Urgent cancellation email sent to ${cancelTarget.clientEmail || cancelTarget.client}.`, "error");
 
     if (selectedBooking && selectedBooking.id === cancelTarget.id) {

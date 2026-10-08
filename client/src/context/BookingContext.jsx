@@ -377,7 +377,9 @@ export const BookingProvider = ({ children }) => {
     return newBooking;
   };
 
-  const updateBookingStatus = (id, newStatus, reason = "", cancelledBy = "Management") => {
+  const updateBookingStatus = (id, newStatus, reason = "", cancelledBy = "Management", targetBooking = null) => {
+    const booking = targetBooking || allBookings.find((b) => b.id === id);
+
     setAllBookings((prev) =>
       prev.map((b) => (b.id === id ? { ...b, status: newStatus, cancellationReason: reason } : b))
     );
@@ -387,10 +389,13 @@ export const BookingProvider = ({ children }) => {
 
     // If cancelled in critical situation, send cancellation email notification to client
     if (newStatus === "Cancelled") {
-      const booking = allBookings.find((b) => b.id === id);
-      if (booking) {
-        const clientEmail = booking.clientEmail || (booking.client && booking.client.includes("@") ? booking.client : "customer@shuttermoments.com");
-        sendCancellationEmail(booking, clientEmail, booking.client, reason, cancelledBy);
+      const b = booking || allBookings.find((item) => item.id === id);
+      if (b) {
+        const clientEmail = b.clientEmail || (b.client && b.client.includes("@") ? b.client : "mohamedysn130@gmail.com");
+        const clientName = b.client || "Valued Customer";
+        console.log(`[Cancellation Email] Dispatching to ${clientEmail} for Booking #${id} by ${cancelledBy}`);
+        sendCancellationEmail(b, clientEmail, clientName, reason, cancelledBy)
+          .catch((err) => console.warn("[Cancellation Email Error]:", err));
       }
     }
   };

@@ -79,6 +79,64 @@ function getConfirmationTemplate(booking, clientEmail, clientName) {
   </html>`;
 }
 
+function getCancellationTemplate(booking, clientEmail, clientName, reason, cancelledBy) {
+  const deposit = ((booking.totalAmount || booking.amount || 0) * 0.3);
+  const photographerName = typeof booking.photographer === "string" 
+    ? booking.photographer 
+    : booking.photographer?.name || "Professional Photographer";
+
+  return `
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <meta charset="utf-8">
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0b1120; color: #f1f5f9; margin: 0; padding: 20px; }
+      .container { max-width: 600px; margin: 0 auto; background: #0f172a; border-radius: 12px; padding: 24px; border: 1px solid #1e293b; }
+      .header { text-align: center; border-bottom: 2px solid #ef4444; padding-bottom: 16px; margin-bottom: 20px; }
+      .badge-cancel { display: inline-block; background: rgba(239, 68, 68, 0.2); color: #f87171; padding: 6px 16px; border-radius: 20px; font-weight: bold; }
+      .reason-box { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 16px; margin: 16px 0; color: #fecaca; }
+      .card { background: #1e293b; border-radius: 8px; padding: 16px; margin: 16px 0; }
+      .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #334155; }
+      .refund-notice { background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; padding: 16px; margin-top: 16px; color: #fef08a; font-size: 13px; line-height: 1.5; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h2 style="color: #ffffff; margin: 0;">⚠️ SHUTTER MOMENTS</h2>
+        <p style="color: #fca5a5; margin: 6px 0 0;">Urgent: Booking Cancellation Notice</p>
+      </div>
+      <div style="text-align: center; margin-bottom: 16px;">
+        <span class="badge-cancel">Booking Cancelled (${cancelledBy || "Management"})</span>
+      </div>
+      <p>Dear <strong>${clientName || "Valued Client"}</strong>,</p>
+      <p>We regret to inform you that due to unexpected circumstances, your photography booking has been cancelled by ${cancelledBy || "management"}.</p>
+      
+      <div class="reason-box">
+        <strong style="color: #ffffff; display: block; margin-bottom: 4px;">Reason for Cancellation:</strong>
+        ${reason || "Emergency situation beyond our control."}
+      </div>
+
+      <div class="card">
+        <div class="row"><span>Booking ID</span><strong style="color: #f87171;">${booking.id || "N/A"}</strong></div>
+        <div class="row"><span>Photography Type</span><strong>${booking.photographyType || booking.event || "Photo Shoot"}</strong></div>
+        <div class="row"><span>Photographer</span><strong>${photographerName}</strong></div>
+        <div class="row"><span>Scheduled Date</span><strong>${booking.eventDate || booking.date || "Scheduled Date"}</strong></div>
+      </div>
+
+      <div class="refund-notice">
+        <strong>💰 Advance Deposit Refund Policy:</strong><br>
+        Because this cancellation was initiated from our side, your 30% advance deposit payment of <strong>Rs. ${deposit.toLocaleString()}</strong> is fully eligible for an immediate 100% refund or priority rescheduling.
+      </div>
+      <p style="margin-top: 20px; font-size: 13px; color: #94a3b8;">
+        If you have any questions, reply to this email or contact support at <strong style="color: #60a5fa;">mohamedysn130@gmail.com</strong>.
+      </p>
+    </div>
+  </body>
+  </html>`;
+}
+
 // ── Main API Router ──────────────────────────────────────────────────────────
 const router = express.Router();
 
@@ -230,23 +288,34 @@ router.get("/payment/stripe/verify-session/:sessionId", async (req, res) => {
 // Email Dispatch
 router.post("/send-email", async (req, res) => {
   try {
-    const { to, subject, type, booking, clientName } = req.body;
+    const { to, subject, type, booking, clientName, reason, cancelledBy } = req.body;
     if (!to) {
       return res.status(400).json({ success: false, error: "Recipient email is required" });
     }
 
     const mailer = await getTransporter();
-    const html = type === "confirmation" 
-      ? getConfirmationTemplate(booking || {}, to, clientName)
-      : (req.body.html || `<p>${req.body.text || "Notification"}</p>`);
+    let html = "";
+    let emailSubject = subject;
+
+    if (type === "cancellation") {
+      emailSubject = emailSubject || `⚠️ Urgent: Booking Cancellation Notice #${booking?.id || "N/A"} – Shutter Moments`;
+      html = getCancellationTemplate(booking || {}, to, clientName, reason, cancelledBy);
+    } else if (type === "confirmation") {
+      emailSubject = emailSubject || `Booking Confirmed #${booking?.id || "N/A"} – Shutter Moments`;
+      html = getConfirmationTemplate(booking || {}, to, clientName);
+    } else {
+      emailSubject = emailSubject || `Notification #${booking?.id || "N/A"} – Shutter Moments`;
+      html = req.body.html || `<p>${req.body.text || "Notification"}</p>`;
+    }
 
     const info = await mailer.sendMail({
       from: process.env.EMAIL_FROM || '"Shutter Moments Photography" <mohamedysn130@gmail.com>',
       to,
-      subject: subject || `Booking Confirmed #${booking?.id} – Shutter Moments`,
+      subject: emailSubject,
       html,
     });
 
+    console.log(`[Email Sent] Type: ${type}, To: ${to}, Message ID: ${info.messageId}`);
     return res.json({ success: true, messageId: info.messageId });
   } catch (err) {
     console.error("Email send error:", err);
