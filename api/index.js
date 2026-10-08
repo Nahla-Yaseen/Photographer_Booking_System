@@ -34,107 +34,264 @@ function getTransporter() {
   });
 }
 
-// Email templates
+// High-Contrast, Universal HTML Email Templates (Gmail Mobile / Dark Mode Compatible)
 function getConfirmationTemplate(booking, clientEmail, clientName) {
-  const deposit = (booking.totalAmount || 0) * 0.3;
-  const balance = (booking.totalAmount || 0) * 0.7;
+  const deposit = (booking.totalAmount || booking.amount || 0) * 0.3;
+  const balance = (booking.totalAmount || booking.amount || 0) * 0.7;
   const photographerName = typeof booking.photographer === "string" 
     ? booking.photographer 
-    : booking.photographer?.name || "Professional Photographer";
+    : booking.photographer?.name || booking.photographerName || "Professional Photographer";
 
-  return `
-  <!DOCTYPE html>
-  <html>
-  <head>
-    <meta charset="utf-8">
-    <style>
-      body { font-family: sans-serif; background-color: #0b1120; color: #f1f5f9; margin: 0; padding: 20px; }
-      .container { max-width: 600px; margin: 0 auto; background: #0f172a; border-radius: 12px; padding: 24px; border: 1px solid #1e293b; }
-      .header { text-align: center; border-bottom: 2px solid #3b82f6; padding-bottom: 16px; margin-bottom: 20px; }
-      .badge { display: inline-block; background: rgba(34, 197, 94, 0.2); color: #4ade80; padding: 4px 12px; border-radius: 20px; font-weight: bold; }
-      .card { background: #1e293b; border-radius: 8px; padding: 16px; margin: 16px 0; }
-      .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #334155; }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <div class="header">
-        <h2>📸 SHUTTER MOMENTS</h2>
-        <p>Premium Photography Booking Confirmation</p>
-      </div>
-      <div style="text-align: center;"><span class="badge">✓ 30% Advance Deposit Paid</span></div>
-      <p>Dear <strong>${clientName || "Valued Client"}</strong>,</p>
-      <p>Your session has been successfully reserved!</p>
-      <div class="card">
-        <div class="row"><span>Booking ID</span><strong>${booking.id || "N/A"}</strong></div>
-        <div class="row"><span>Photographer</span><strong>${photographerName}</strong></div>
-        <div class="row"><span>Date</span><strong>${booking.eventDate || booking.date || "Scheduled"}</strong></div>
-        <div class="row"><span>Time Slot</span><strong>${booking.slotLabel || booking.time || "Scheduled"}</strong></div>
-        <div class="row"><span>Total</span><strong>Rs. ${(booking.totalAmount || 0).toLocaleString()}</strong></div>
-        <div class="row"><span>Deposit Paid (30%)</span><strong style="color: #4ade80;">Rs. ${deposit.toLocaleString()}</strong></div>
-        <div class="row"><span>Remaining Due</span><strong style="color: #fbbf24;">Rs. ${balance.toLocaleString()}</strong></div>
-      </div>
-    </div>
-  </body>
-  </html>`;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>Booking Confirmed – Shutter Moments</title>
+  <style>
+    :root { color-scheme: light dark; supported-color-schemes: light dark; }
+    @media (prefers-color-scheme: dark) {
+      .dark-bg { background-color: #0f172a !important; }
+      .dark-card { background-color: #1e293b !important; border-color: #334155 !important; }
+      .dark-text { color: #f8fafc !important; }
+      .dark-muted { color: #94a3b8 !important; }
+      .dark-table-row { border-bottom-color: #334155 !important; }
+    }
+  </style>
+</head>
+<body class="dark-bg" style="margin: 0; padding: 20px 10px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" align="center" style="max-width: 600px; margin: 0 auto;">
+    <tr>
+      <td>
+        <table class="dark-card" width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#ffffff" style="background-color: #ffffff; border-radius: 12px; border: 1px solid #cbd5e1; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06);">
+          <!-- Header Banner -->
+          <tr>
+            <td bgcolor="#1e3a8a" style="background-color: #1e3a8a; padding: 30px 20px; text-align: center;">
+              <h1 style="margin: 0; color: #ffffff !important; font-size: 24px; font-weight: 800; letter-spacing: 0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">
+                📸 SHUTTER MOMENTS
+              </h1>
+              <p style="margin: 8px 0 0; color: #dbeafe !important; font-size: 14px; font-weight: 600;">
+                Official Booking Confirmation &amp; Deposit Receipt
+              </p>
+            </td>
+          </tr>
+
+          <!-- Main Content -->
+          <tr>
+            <td style="padding: 28px 22px;">
+              <!-- Deposit Paid Badge -->
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
+                <tr>
+                  <td align="center">
+                    <span style="display: inline-block; background-color: #dcfce7; color: #14532d; border: 1px solid #86efac; padding: 7px 18px; border-radius: 24px; font-weight: 800; font-size: 13px; letter-spacing: 0.3px;">
+                      ✓ 30% Advance Deposit Paid &amp; Confirmed
+                    </span>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Greeting -->
+              <p class="dark-text" style="margin: 0 0 10px; color: #0a0a0a; font-size: 17px; font-weight: 800;">
+                Dear ${clientName || "Valued Client"},
+              </p>
+              <p class="dark-muted" style="margin: 0 0 22px; color: #1e293b; font-size: 15px; line-height: 1.6; font-weight: 500;">
+                Congratulations! Your photography session has been successfully reserved and your date is locked in. We have securely processed your 30% advance deposit.
+              </p>
+
+              <!-- Booking Details Box -->
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#f8fafc" style="background-color: #f8fafc; border: 2px solid #e2e8f0; border-radius: 10px; margin-bottom: 22px; padding: 6px 16px;">
+                <tr>
+                  <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #334155; font-size: 13px; font-weight: 700;">Booking ID</td>
+                  <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #1d4ed8; font-size: 15px; font-weight: 800; text-align: right;">${booking.id || "N/A"}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #334155; font-size: 13px; font-weight: 700;">Photography Type</td>
+                  <td class="dark-text" style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #0a0a0a; font-size: 14px; font-weight: 800; text-align: right;">${booking.photographyType || booking.event || "Photo Shoot"}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #334155; font-size: 13px; font-weight: 700;">Photographer</td>
+                  <td class="dark-text" style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #0a0a0a; font-size: 14px; font-weight: 800; text-align: right;">${photographerName}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #334155; font-size: 13px; font-weight: 700;">Scheduled Date</td>
+                  <td class="dark-text" style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #0a0a0a; font-size: 14px; font-weight: 800; text-align: right;">${booking.eventDate || booking.date || "Scheduled Date"}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #334155; font-size: 13px; font-weight: 700;">Time Slot</td>
+                  <td class="dark-text" style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #0a0a0a; font-size: 14px; font-weight: 800; text-align: right;">${booking.slotLabel || booking.time || "Scheduled Time"}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 11px 0; color: #334155; font-size: 13px; font-weight: 700;">Location</td>
+                  <td class="dark-text" style="padding: 11px 0; color: #0a0a0a; font-size: 14px; font-weight: 800; text-align: right;">${booking.location || "On-site"}</td>
+                </tr>
+              </table>
+
+              <!-- Financial Breakdown Box -->
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#f0fdf4" style="background-color: #f0fdf4; border: 2px solid #86efac; border-radius: 10px; margin-bottom: 24px; padding: 12px 16px;">
+                <tr>
+                  <td style="padding: 7px 0; color: #1f2937; font-size: 14px; font-weight: 700;">Total Booking Amount</td>
+                  <td class="dark-text" style="padding: 7px 0; color: #0a0a0a; font-size: 16px; font-weight: 800; text-align: right;">Rs. ${(booking.totalAmount || booking.amount || 0).toLocaleString()}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 7px 0; color: #15803d; font-size: 14px; font-weight: 800;">30% Advance Deposit (Paid)</td>
+                  <td style="padding: 7px 0; color: #15803d; font-size: 16px; font-weight: 800; text-align: right;">Rs. ${deposit.toLocaleString()} ✓</td>
+                </tr>
+                <tr>
+                  <td style="padding: 7px 0; color: #9a3412; font-size: 13px; font-weight: 700;">Remaining Balance (Due on Event Day)</td>
+                  <td style="padding: 7px 0; color: #c2410c; font-size: 15px; font-weight: 800; text-align: right;">Rs. ${balance.toLocaleString()}</td>
+                </tr>
+              </table>
+
+              <!-- Notice -->
+              <p class="dark-muted" style="margin: 0 0 10px; color: #475569; font-size: 13px; line-height: 1.6;">
+                Your photographer will contact you ahead of time to coordinate any special requests. If you have any questions or need to make changes, simply reply to this email or contact us at <a href="mailto:mohamedysn130@gmail.com" style="color: #1d4ed8; text-decoration: underline; font-weight: 700;">mohamedysn130@gmail.com</a>.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td bgcolor="#f8fafc" style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 18px 20px; text-align: center; color: #64748b; font-size: 12px; line-height: 1.5;">
+              &copy; ${new Date().getFullYear()} Shutter Moments Photography. All rights reserved.<br>
+              Premium Professional Photography &amp; Creative Media Studio
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 }
 
 function getCancellationTemplate(booking, clientEmail, clientName, reason, cancelledBy) {
   const deposit = ((booking.totalAmount || booking.amount || 0) * 0.3);
   const photographerName = typeof booking.photographer === "string" 
     ? booking.photographer 
-    : booking.photographer?.name || "Professional Photographer";
+    : booking.photographer?.name || booking.photographerName || "Professional Photographer";
 
-  return `
-  <!DOCTYPE html>
-  <html>
-  <head>
-    <meta charset="utf-8">
-    <style>
-      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0b1120; color: #f1f5f9; margin: 0; padding: 20px; }
-      .container { max-width: 600px; margin: 0 auto; background: #0f172a; border-radius: 12px; padding: 24px; border: 1px solid #1e293b; }
-      .header { text-align: center; border-bottom: 2px solid #ef4444; padding-bottom: 16px; margin-bottom: 20px; }
-      .badge-cancel { display: inline-block; background: rgba(239, 68, 68, 0.2); color: #f87171; padding: 6px 16px; border-radius: 20px; font-weight: bold; }
-      .reason-box { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 16px; margin: 16px 0; color: #fecaca; }
-      .card { background: #1e293b; border-radius: 8px; padding: 16px; margin: 16px 0; }
-      .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #334155; }
-      .refund-notice { background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; padding: 16px; margin-top: 16px; color: #fef08a; font-size: 13px; line-height: 1.5; }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <div class="header">
-        <h2 style="color: #ffffff; margin: 0;">⚠️ SHUTTER MOMENTS</h2>
-        <p style="color: #fca5a5; margin: 6px 0 0;">Urgent: Booking Cancellation Notice</p>
-      </div>
-      <div style="text-align: center; margin-bottom: 16px;">
-        <span class="badge-cancel">Booking Cancelled (${cancelledBy || "Management"})</span>
-      </div>
-      <p>Dear <strong>${clientName || "Valued Client"}</strong>,</p>
-      <p>We regret to inform you that due to unexpected circumstances, your photography booking has been cancelled by ${cancelledBy || "management"}.</p>
-      
-      <div class="reason-box">
-        <strong style="color: #ffffff; display: block; margin-bottom: 4px;">Reason for Cancellation:</strong>
-        ${reason || "Emergency situation beyond our control."}
-      </div>
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>Booking Cancellation Notice – Shutter Moments</title>
+  <style>
+    :root { color-scheme: light dark; supported-color-schemes: light dark; }
+    @media (prefers-color-scheme: dark) {
+      .dark-bg { background-color: #0f172a !important; }
+      .dark-card { background-color: #1e293b !important; border-color: #334155 !important; }
+      .dark-text { color: #f8fafc !important; }
+      .dark-muted { color: #94a3b8 !important; }
+      .dark-table-row { border-bottom-color: #334155 !important; }
+    }
+  </style>
+</head>
+<body class="dark-bg" style="margin: 0; padding: 20px 10px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" align="center" style="max-width: 600px; margin: 0 auto;">
+    <tr>
+      <td>
+        <table class="dark-card" width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#ffffff" style="background-color: #ffffff; border-radius: 12px; border: 1px solid #cbd5e1; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06);">
+          <!-- Header Banner -->
+          <tr>
+            <td bgcolor="#991b1b" style="background-color: #991b1b; padding: 30px 20px; text-align: center;">
+              <h1 style="margin: 0; color: #ffffff !important; font-size: 24px; font-weight: 800; letter-spacing: 0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">
+                ⚠️ SHUTTER MOMENTS
+              </h1>
+              <p style="margin: 8px 0 0; color: #fee2e2 !important; font-size: 14px; font-weight: 600;">
+                Urgent: Booking Cancellation Notice
+              </p>
+            </td>
+          </tr>
 
-      <div class="card">
-        <div class="row"><span>Booking ID</span><strong style="color: #f87171;">${booking.id || "N/A"}</strong></div>
-        <div class="row"><span>Photography Type</span><strong>${booking.photographyType || booking.event || "Photo Shoot"}</strong></div>
-        <div class="row"><span>Photographer</span><strong>${photographerName}</strong></div>
-        <div class="row"><span>Scheduled Date</span><strong>${booking.eventDate || booking.date || "Scheduled Date"}</strong></div>
-      </div>
+          <!-- Main Content -->
+          <tr>
+            <td style="padding: 28px 22px;">
+              <!-- Status Badge -->
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
+                <tr>
+                  <td align="center">
+                    <span style="display: inline-block; background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; padding: 7px 18px; border-radius: 24px; font-weight: 800; font-size: 13px; letter-spacing: 0.3px;">
+                      Booking Cancelled (${cancelledBy || "Management"})
+                    </span>
+                  </td>
+                </tr>
+              </table>
 
-      <div class="refund-notice">
-        <strong>💰 Advance Deposit Refund Policy:</strong><br>
-        Because this cancellation was initiated from our side, your 30% advance deposit payment of <strong>Rs. ${deposit.toLocaleString()}</strong> is fully eligible for an immediate 100% refund or priority rescheduling.
-      </div>
-      <p style="margin-top: 20px; font-size: 13px; color: #94a3b8;">
-        If you have any questions, reply to this email or contact support at <strong style="color: #60a5fa;">mohamedysn130@gmail.com</strong>.
-      </p>
-    </div>
-  </body>
-  </html>`;
+              <!-- Greeting -->
+              <p class="dark-text" style="margin: 0 0 10px; color: #0a0a0a; font-size: 17px; font-weight: 800;">
+                Dear ${clientName || "Valued Client"},
+              </p>
+              <p class="dark-muted" style="margin: 0 0 22px; color: #1e293b; font-size: 15px; line-height: 1.6; font-weight: 500;">
+                We sincerely apologize to inform you that due to unexpected circumstances, your photography booking has been cancelled by ${cancelledBy || "our management"}.
+              </p>
+
+              <!-- Reason Box -->
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#fff1f2" style="background-color: #fff1f2; border: 2px solid #fecdd3; border-radius: 10px; padding: 14px 16px; margin-bottom: 22px;">
+                <tr>
+                  <td>
+                    <strong style="color: #9f1239; font-size: 13px; display: block; margin-bottom: 4px; font-weight: 800;">Reason for Cancellation:</strong>
+                    <span style="color: #881337; font-size: 15px; font-weight: 700; line-height: 1.4;">${reason || "Emergency situation beyond our control."}</span>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Booking Details Box -->
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#f8fafc" style="background-color: #f8fafc; border: 2px solid #e2e8f0; border-radius: 10px; margin-bottom: 22px; padding: 6px 16px;">
+                <tr>
+                  <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #334155; font-size: 13px; font-weight: 700;">Booking ID</td>
+                  <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #dc2626; font-size: 15px; font-weight: 800; text-align: right;">${booking.id || "N/A"}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #334155; font-size: 13px; font-weight: 700;">Photography Type</td>
+                  <td class="dark-text" style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #0a0a0a; font-size: 14px; font-weight: 800; text-align: right;">${booking.photographyType || booking.event || "Photo Shoot"}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #334155; font-size: 13px; font-weight: 700;">Photographer</td>
+                  <td class="dark-text" style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #0a0a0a; font-size: 14px; font-weight: 800; text-align: right;">${photographerName}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 11px 0; color: #334155; font-size: 13px; font-weight: 700;">Scheduled Date</td>
+                  <td class="dark-text" style="padding: 11px 0; color: #0a0a0a; font-size: 14px; font-weight: 800; text-align: right;">${booking.eventDate || booking.date || "Scheduled Date"}</td>
+                </tr>
+              </table>
+
+              <!-- 100% Refund Guarantee Box -->
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#fefce8" style="background-color: #fefce8; border: 2px solid #fef08a; border-radius: 10px; padding: 14px 16px; margin-bottom: 24px;">
+                <tr>
+                  <td>
+                    <strong style="color: #854d0e; font-size: 14px; display: block; margin-bottom: 6px; font-weight: 800;">💰 100% Advance Deposit Refund Policy:</strong>
+                    <span style="color: #713f12; font-size: 13px; line-height: 1.6; font-weight: 600; display: block;">
+                      Because this cancellation was initiated by our team, your 30% advance deposit payment of <strong style="color: #15803d; font-size: 14px;">Rs. ${deposit.toLocaleString()}</strong> is fully eligible for an immediate 100% refund or priority free rescheduling to any available date of your choice.
+                    </span>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Assistance Note -->
+              <p class="dark-muted" style="margin: 0; color: #475569; font-size: 13px; line-height: 1.6;">
+                If you have questions regarding your refund or wish to reschedule, please reply directly to this email or reach us at <a href="mailto:mohamedysn130@gmail.com" style="color: #1d4ed8; text-decoration: underline; font-weight: 700;">mohamedysn130@gmail.com</a>.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td bgcolor="#f8fafc" style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 18px 20px; text-align: center; color: #64748b; font-size: 12px; line-height: 1.5;">
+              &copy; ${new Date().getFullYear()} Shutter Moments Customer Care Team<br>
+              Direct Support: mohamedysn130@gmail.com
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 }
 
 // ── Main API Router ──────────────────────────────────────────────────────────
