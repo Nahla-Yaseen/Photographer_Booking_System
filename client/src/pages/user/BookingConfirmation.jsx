@@ -24,7 +24,14 @@ export default function BookingConfirmation() {
     if (sessionId && !confirmedBooking) {
       setVerifyingSession(true);
       fetch(`${PAYMENT_API}/api/payment/stripe/verify-session/${sessionId}`)
-        .then((res) => res.json())
+        .then(async (res) => {
+          const text = await res.text();
+          try {
+            return JSON.parse(text);
+          } catch (e) {
+            throw new Error(`Server returned HTTP ${res.status}: ${text.slice(0, 150)}`);
+          }
+        })
         .then((data) => {
           if (data.success && data.paid) {
             let pending = null;

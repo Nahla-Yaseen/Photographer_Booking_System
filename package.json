@@ -2,6 +2,7 @@
   "name": "shutter-moments",
   "private": true,
   "version": "1.0.0",
+  "type": "module",
   "scripts": {
     "postinstall": "npm --prefix ./client install --include=dev",
     "build": "cd client && npm install --include=dev && npm run build",

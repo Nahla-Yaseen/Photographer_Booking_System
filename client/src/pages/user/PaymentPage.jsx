@@ -144,10 +144,16 @@ export default function PaymentPage() {
         }),
       });
 
-      const data = await resp.json();
+      const text = await resp.text();
+      let data = {};
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        throw new Error(`Server returned HTTP ${resp.status}: ${text.slice(0, 150)}`);
+      }
 
       if (!resp.ok || !data.success) {
-        throw new Error(data.error || "Failed to initialize Stripe checkout.");
+        throw new Error(data.error || `Payment server error (Status ${resp.status})`);
       }
 
       if (data.url) {
